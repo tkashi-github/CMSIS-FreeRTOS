@@ -1,5 +1,5 @@
 /*
-    FreeRTOS V9.0.0 - Copyright (C) 2016 Real Time Engineers Ltd.
+    FreeRTOS V9.0.1 - Copyright (C) 2017 Real Time Engineers Ltd.
     All rights reserved
 
     VISIT http://www.FreeRTOS.org TO ENSURE YOU ARE USING THE LATEST VERSION.
@@ -76,17 +76,18 @@
 #include "task.h"
 
 /* Constants required to manipulate the NVIC. */
-#define portNVIC_SYSTICK_CTRL		( ( volatile uint32_t *) 0xe000e010 )
-#define portNVIC_SYSTICK_LOAD		( ( volatile uint32_t *) 0xe000e014 )
-#define portNVIC_INT_CTRL			( ( volatile uint32_t *) 0xe000ed04 )
-#define portNVIC_SYSPRI2			( ( volatile uint32_t *) 0xe000ed20 )
-#define portNVIC_SYSTICK_CLK		0x00000004
-#define portNVIC_SYSTICK_INT		0x00000002
-#define portNVIC_SYSTICK_ENABLE		0x00000001
-#define portNVIC_PENDSVSET			0x10000000
-#define portMIN_INTERRUPT_PRIORITY	( 255UL )
-#define portNVIC_PENDSV_PRI			( portMIN_INTERRUPT_PRIORITY << 16UL )
-#define portNVIC_SYSTICK_PRI		( portMIN_INTERRUPT_PRIORITY << 24UL )
+#define portNVIC_SYSTICK_CTRL			( ( volatile uint32_t * ) 0xe000e010 )
+#define portNVIC_SYSTICK_LOAD			( ( volatile uint32_t * ) 0xe000e014 )
+#define portNVIC_SYSTICK_CURRENT_VALUE	( ( volatile uint32_t * ) 0xe000e018 )
+#define portNVIC_INT_CTRL				( ( volatile uint32_t *) 0xe000ed04 )
+#define portNVIC_SYSPRI2				( ( volatile uint32_t *) 0xe000ed20 )
+#define portNVIC_SYSTICK_CLK			0x00000004
+#define portNVIC_SYSTICK_INT			0x00000002
+#define portNVIC_SYSTICK_ENABLE			0x00000001
+#define portNVIC_PENDSVSET				0x10000000
+#define portMIN_INTERRUPT_PRIORITY		( 255UL )
+#define portNVIC_PENDSV_PRI				( portMIN_INTERRUPT_PRIORITY << 16UL )
+#define portNVIC_SYSTICK_PRI			( portMIN_INTERRUPT_PRIORITY << 24UL )
 
 /* Constants required to set up the initial stack. */
 #define portINITIAL_XPSR			( 0x01000000 )
@@ -99,10 +100,6 @@ debugger. */
 #else
 	#define portTASK_RETURN_ADDRESS	prvTaskExitError
 #endif
-
-/* Each task maintains its own interrupt status in the critical nesting
-variable. */
-static UBaseType_t uxCriticalNesting = 0xaaaaaaaa;
 
 /*
  * Setup the timer to generate the tick interrupts.
@@ -124,8 +121,13 @@ static void vPortStartFirstTask( void ) __attribute__ (( naked ));
 /*
  * Used to catch tasks that attempt to return from their implementing function.
  */
-__attribute__((noreturn))
-static void prvTaskExitError( void );
+static void prvTaskExitError( void ) __attribute__ (( noreturn ));
+
+/*-----------------------------------------------------------*/
+
+/* Each task maintains its own interrupt status in the critical nesting
+variable. */
+static UBaseType_t uxCriticalNesting = 0xaaaaaaaa;
 
 /*-----------------------------------------------------------*/
 
@@ -177,24 +179,21 @@ void vPortStartFirstTask( void )
 	table offset register that can be used to locate the initial stack value.
 	Not all M0 parts have the application vector table at address 0. */
 	__asm volatile(
-	"	ldr	r2, pxCurrentTCBConst2	\n" /* Obtain location of pxCurrentTCB. */
-	"	ldr r3, [r2]				\n"
-	"	ldr r0, [r3]				\n" /* The first item in pxCurrentTCB is the task top of stack. */
-#if defined (__ARMCC_VERSION) && (__ARMCC_VERSION >= 6010050)
+	"	.syntax unified				\n"
+	"	ldr  r2, pxCurrentTCBConst2	\n" /* Obtain location of pxCurrentTCB. */
+	"	ldr  r3, [r2]				\n"
+	"	ldr  r0, [r3]				\n" /* The first item in pxCurrentTCB is the task top of stack. */
 	"	adds r0, #32					\n" /* Discard everything up to r0. */
-#else
-	"	add r0, #32					\n" /* Discard everything up to r0. */
-#endif
-	"	msr psp, r0					\n" /* This is now the new top of stack to use in the task. */
+	"	msr  psp, r0					\n" /* This is now the new top of stack to use in the task. */
 	"	movs r0, #2					\n" /* Switch to the psp stack. */
-	"	msr CONTROL, r0				\n"
+	"	msr  CONTROL, r0				\n"
 	"	isb							\n"
-	"	pop {r0-r5}					\n" /* Pop the registers that are saved automatically. */
-	"	mov lr, r5					\n" /* lr is now in r5. */
-	"	pop {r3}					\n" /* Return address is now in r3. */
-	"	pop {r2}					\n" /* Pop and discard XPSR. */
+	"	pop  {r0-r5}					\n" /* Pop the registers that are saved automatically. */
+	"	mov  lr, r5					\n" /* lr is now in r5. */
+	"	pop  {r3}					\n" /* Return address is now in r3. */
+	"	pop  {r2}					\n" /* Pop and discard XPSR. */
 	"	cpsie i						\n" /* The first task has its context and interrupts can be enabled. */
-	"	bx r3						\n" /* Finally, jump to the user defined task code. */
+	"	bx   r3						\n" /* Finally, jump to the user defined task code. */
 	"								\n"
 	"	.align 4					\n"
 	"pxCurrentTCBConst2: .word pxCurrentTCB	  "
@@ -224,13 +223,14 @@ BaseType_t xPortStartScheduler( void )
 	/* Should never get here as the tasks will now be executing!  Call the task
 	exit error function to prevent compiler warnings about a static function
 	not being called in the case that the application writer overrides this
-	functionality by defining configTASK_RETURN_ADDRESS. */
+	functionality by defining configTASK_RETURN_ADDRESS.  Call
+	vTaskSwitchContext() so link time optimisation does not remove the
+	symbol. */
 	prvTaskExitError();
+	vTaskSwitchContext();
 
-#if !defined (__ARMCC_VERSION) && (__ARMCC_VERSION >= 6010050)
 	/* Should not get here! */
 	return 0;
-#endif
 }
 /*-----------------------------------------------------------*/
 
@@ -249,7 +249,7 @@ void vPortYield( void )
 
 	/* Barriers are normally not required but do ensure the code is completely
 	within the specified behaviour for the architecture. */
-	__asm volatile( "dsb" );
+	__asm volatile( "dsb" ::: "memory" );
 	__asm volatile( "isb" );
 }
 /*-----------------------------------------------------------*/
@@ -258,7 +258,7 @@ void vPortEnterCritical( void )
 {
     portDISABLE_INTERRUPTS();
     uxCriticalNesting++;
-	__asm volatile( "dsb" );
+	__asm volatile( "dsb" ::: "memory" );
 	__asm volatile( "isb" );
 }
 /*-----------------------------------------------------------*/
@@ -280,24 +280,30 @@ uint32_t ulSetInterruptMaskFromISR( void )
 					" mrs r0, PRIMASK	\n"
 					" cpsid i			\n"
 					" bx lr				  "
+					::: "memory"
 				  );
 
 #if !defined (__ARMCC_VERSION) && (__ARMCC_VERSION >= 6010050)
-	/* To avoid compiler warnings.  This line will never be reached. */
+	/* To avoid compiler warnings.  The return statement will nevere be reached,
+	but some compilers warn if it is not included, while others won't compile if
+	it is. */
 	return 0;
 #endif
 }
 /*-----------------------------------------------------------*/
 
-void vClearInterruptMaskFromISR( __attribute__((unused)) uint32_t ulMask )
+void vClearInterruptMaskFromISR( __attribute__( ( unused ) ) uint32_t ulMask )
 {
 	__asm volatile(
 					" msr PRIMASK, r0	\n"
 					" bx lr				  "
+					::: "memory"
 				  );
 
 #if !defined (__ARMCC_VERSION) && (__ARMCC_VERSION >= 6010050)
-	/* Just to avoid compiler warning. */
+	/* Just to avoid compiler warning.  ulMask is used from the asm code but
+	the compiler can't see that.  Some compilers generate warnings without the
+	following line, while others generate warnings if the line is included. */
 	( void ) ulMask;
 #endif
 }
@@ -309,23 +315,20 @@ void xPortPendSVHandler( void )
 
 	__asm volatile
 	(
+	"	.syntax unified						\n"
 	"	mrs r0, psp							\n"
 	"										\n"
 	"	ldr	r3, pxCurrentTCBConst			\n" /* Get the location of the current TCB. */
 	"	ldr	r2, [r3]						\n"
 	"										\n"
-#if defined (__ARMCC_VERSION) && (__ARMCC_VERSION >= 6010050)
 	"	subs r0, r0, #32						\n" /* Make space for the remaining low registers. */
-#else
-	"	sub r0, r0, #32						\n" /* Make space for the remaining low registers. */
-#endif
 	"	str r0, [r2]						\n" /* Save the new top of stack. */
 	"	stmia r0!, {r4-r7}					\n" /* Store the low registers that are not saved automatically. */
 	" 	mov r4, r8							\n" /* Store the high registers. */
 	" 	mov r5, r9							\n"
 	" 	mov r6, r10							\n"
 	" 	mov r7, r11							\n"
-	" 	stmia r0!, {r4-r7}              	\n"
+	" 	stmia r0!, {r4-r7}					\n"
 	"										\n"
 	"	push {r3, r14}						\n"
 	"	cpsid i								\n"
@@ -335,11 +338,7 @@ void xPortPendSVHandler( void )
 	"										\n"
 	"	ldr r1, [r2]						\n"
 	"	ldr r0, [r1]						\n" /* The first item in pxCurrentTCB is the task top of stack. */
-#if defined (__ARMCC_VERSION) && (__ARMCC_VERSION >= 6010050)
 	"	adds r0, r0, #16						\n" /* Move to the high registers. */
-#else
-	"	add r0, r0, #16						\n" /* Move to the high registers. */
-#endif
 	"	ldmia r0!, {r4-r7}					\n" /* Pop the high registers. */
 	" 	mov r8, r4							\n"
 	" 	mov r9, r5							\n"
@@ -348,12 +347,8 @@ void xPortPendSVHandler( void )
 	"										\n"
 	"	msr psp, r0							\n" /* Remember the new top of stack for the task. */
 	"										\n"
-#if defined (__ARMCC_VERSION) && (__ARMCC_VERSION >= 6010050)
-	"	subs r0, r0, #32						\n" /* Go back for the low registers that are not automatically restored. */
-#else
-	"	sub r0, r0, #32						\n" /* Go back for the low registers that are not automatically restored. */
-#endif
-	" 	ldmia r0!, {r4-r7}              	\n" /* Pop low registers.  */
+	"	subs r0, r0, #32					\n" /* Go back for the low registers that are not automatically restored. */
+	" 	ldmia r0!, {r4-r7}					\n" /* Pop low registers.  */
 	"										\n"
 	"	bx r3								\n"
 	"										\n"
@@ -386,6 +381,10 @@ uint32_t ulPreviousMask;
  */
 void prvSetupTimerInterrupt( void )
 {
+	/* Stop and reset the SysTick. */
+	*(portNVIC_SYSTICK_CTRL) = 0UL;
+	*(portNVIC_SYSTICK_CURRENT_VALUE) = 0UL;
+
 	/* Configure SysTick to interrupt at the requested rate. */
 	*(portNVIC_SYSTICK_LOAD) = ( configCPU_CLOCK_HZ / configTICK_RATE_HZ ) - 1UL;
 	*(portNVIC_SYSTICK_CTRL) = portNVIC_SYSTICK_CLK | portNVIC_SYSTICK_INT | portNVIC_SYSTICK_ENABLE;
