@@ -203,6 +203,12 @@
       <require condition="CM7_DP"/>
       <require condition="ARMCC6"/>
     </condition>
+
+    <condition id="CA9_DP_ARMCC6">
+      <description>Cortex-A9 processor based device for the ARM Compiler 6</description>
+      <require condition="CA9_DP"/>
+      <require condition="ARMCC6"/>
+    </condition>
 	
     <!-- GCC compiler -->
     <condition id="CM0_GCC">
@@ -357,6 +363,9 @@
           <file category="source"    condition="CM7_DP_ARMCC6" name="Source/portable/GCC/ARM_CM7/r0p1/port.c"/>
           <file category="include"   condition="CM7_SP_ARMCC6" name="Source/portable/GCC/ARM_CM7/r0p1/"/>
           <file category="source"    condition="CM7_SP_ARMCC6" name="Source/portable/GCC/ARM_CM7/r0p1/port.c"/>
+          <file category="include"   condition="CA9_DP_ARMCC6" name="Source/portable/GCC/ARM_CA9/"/>
+          <file category="source"    condition="CA9_DP_ARMCC6" name="Source/portable/GCC/ARM_CA9/port.c"/>
+          <file category="sourceAsm" condition="CA9_DP_ARMCC6" name="Source/portable/GCC/ARM_CA9/portASM.s"/>
 		  
           <file category="include"   condition="CM0_GCC"    name="Source/portable/GCC/ARM_CM0/"/>
           <file category="source"    condition="CM0_GCC"    name="Source/portable/GCC/ARM_CM0/port.c"/>
