@@ -59,6 +59,7 @@ void Reset_Handler(void);
 /*----------------------------------------------------------------------------
   Exception / Interrupt Handler
  *----------------------------------------------------------------------------*/
+extern void Reset_Handler();
 void Undef_Handler (void) __attribute__ ((weak, alias("Default_Handler")));
 void SVC_Handler   (void) __attribute__ ((weak, alias("Default_Handler")));
 void PAbt_Handler  (void) __attribute__ ((weak, alias("Default_Handler")));
@@ -69,23 +70,18 @@ void FIQ_Handler   (void) __attribute__ ((weak, alias("Default_Handler")));
 /*----------------------------------------------------------------------------
   Exception / Interrupt Vector Table
  *----------------------------------------------------------------------------*/
-void Vectors(void) __attribute__ ((section("RESET")));
-__ASM void Vectors(void) {
-  IMPORT Reset_Handler
-  IMPORT Undef_Handler
-  IMPORT SVC_Handler
-  IMPORT PAbt_Handler
-  IMPORT DAbt_Handler
-  IMPORT IRQ_Handler
-  IMPORT FIQ_Handler
-  LDR    PC, =Reset_Handler
-  LDR    PC, =Undef_Handler
-  LDR    PC, =SVC_Handler
-  LDR    PC, =PAbt_Handler
-  LDR    PC, =DAbt_Handler
-  NOP
-  LDR    PC, =IRQ_Handler
-  LDR    PC, =FIQ_Handler
+void Vectors(void) __attribute__ ((naked, section("RESET")));
+void Vectors(void) {
+  __ASM volatile(
+  "LDR    PC, =Reset_Handler \n"
+  "LDR    PC, =Undef_Handler \n"
+  "LDR    PC, =FreeRTOS_SWI_Handler \n"
+  "LDR    PC, =PAbt_Handler  \n"
+  "LDR    PC, =DAbt_Handler  \n"
+  "NOP                       \n"
+  "LDR    PC, =FreeRTOS_IRQ_Handler \n"
+  "LDR    PC, =FIQ_Handler   \n"
+  );
 }
 
 /*----------------------------------------------------------------------------
@@ -174,5 +170,5 @@ uint32_t reg;
   Default Handler for Exceptions / Interrupts
  *----------------------------------------------------------------------------*/
 void Default_Handler(void) {
-	while(1);
+  while(1);
 }
