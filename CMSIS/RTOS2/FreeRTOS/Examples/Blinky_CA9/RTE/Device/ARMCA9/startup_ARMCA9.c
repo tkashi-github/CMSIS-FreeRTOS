@@ -42,24 +42,14 @@
 #define IRQ_Handler FreeRTOS_IRQ_Handler
 
 /*----------------------------------------------------------------------------
-  Linker generated Symbols
- *----------------------------------------------------------------------------*/
-extern uint32_t Image$$FIQ_STACK$$ZI$$Limit;
-extern uint32_t Image$$IRQ_STACK$$ZI$$Limit;
-extern uint32_t Image$$SVC_STACK$$ZI$$Limit;
-extern uint32_t Image$$ABT_STACK$$ZI$$Limit;
-extern uint32_t Image$$UND_STACK$$ZI$$Limit;
-extern uint32_t Image$$ARM_LIB_STACK$$ZI$$Limit;
-
-/*----------------------------------------------------------------------------
   Internal References
  *----------------------------------------------------------------------------*/
-void Reset_Handler(void);
+void Vectors       (void) __attribute__ ((naked, section("RESET")));
+void Reset_Handler (void) __attribute__ ((naked));
 
 /*----------------------------------------------------------------------------
   Exception / Interrupt Handler
  *----------------------------------------------------------------------------*/
-extern void Reset_Handler();
 void Undef_Handler (void) __attribute__ ((weak, alias("Default_Handler")));
 void SVC_Handler   (void) __attribute__ ((weak, alias("Default_Handler")));
 void PAbt_Handler  (void) __attribute__ ((weak, alias("Default_Handler")));
@@ -70,17 +60,16 @@ void FIQ_Handler   (void) __attribute__ ((weak, alias("Default_Handler")));
 /*----------------------------------------------------------------------------
   Exception / Interrupt Vector Table
  *----------------------------------------------------------------------------*/
-void Vectors(void) __attribute__ ((naked, section("RESET")));
 void Vectors(void) {
   __ASM volatile(
-  "LDR    PC, =Reset_Handler \n"
-  "LDR    PC, =Undef_Handler \n"
-  "LDR    PC, =FreeRTOS_SWI_Handler \n"
-  "LDR    PC, =PAbt_Handler  \n"
-  "LDR    PC, =DAbt_Handler  \n"
-  "NOP                       \n"
-  "LDR    PC, =FreeRTOS_IRQ_Handler \n"
-  "LDR    PC, =FIQ_Handler   \n"
+  "LDR    PC, =Reset_Handler                        \n"
+  "LDR    PC, =Undef_Handler                        \n"
+  "LDR    PC, =FreeRTOS_SWI_Handler                 \n"
+  "LDR    PC, =PAbt_Handler                         \n"
+  "LDR    PC, =DAbt_Handler                         \n"
+  "NOP                                              \n"
+  "LDR    PC, =FreeRTOS_IRQ_Handler                 \n"
+  "LDR    PC, =FIQ_Handler                          \n"
   );
 }
 
@@ -88,82 +77,60 @@ void Vectors(void) {
   Reset Handler called on controller reset
  *----------------------------------------------------------------------------*/
 void Reset_Handler(void) {
-uint32_t reg;
+  __ASM volatile(
+
+  // Mask interrupts
+  "CPSID   if                                      \n"
 
   // Put any cores other than 0 to sleep
-  if ((__get_MPIDR()&3U)!=0) __WFI();
+  "MRC     p15, 0, R0, c0, c0, 5                   \n"  // Read MPIDR
+  "ANDS    R0, R0, #3                              \n"
+  "goToSleep:                                      \n"
+  "WFINE                                           \n"
+  "BNE     goToSleep                               \n"
 
-  reg  = __get_SCTLR();  // Read CP15 System Control register
-  reg &= ~(0x1 << 12);   // Clear I bit 12 to disable I Cache
-  reg &= ~(0x1 <<  2);   // Clear C bit  2 to disable D Cache
-  reg &= ~(0x1 <<  0);   // Clear M bit  0 to disable MMU
-  reg &= ~(0x1 << 11);   // Clear Z bit 11 to disable branch prediction
-  reg &= ~(0x1 << 13);   // Clear V bit 13 to disable hivecs
-  __set_SCTLR(reg);      // Write value back to CP15 System Control register
-  __ISB();
+  // Reset SCTLR Settings
+  "MRC     p15, 0, R0, c1, c0, 0                   \n"  // Read CP15 System Control register
+  "BIC     R0, R0, #(0x1 << 12)                    \n"  // Clear I bit 12 to disable I Cache
+  "BIC     R0, R0, #(0x1 <<  2)                    \n"  // Clear C bit  2 to disable D Cache
+  "BIC     R0, R0, #0x1                            \n"  // Clear M bit  0 to disable MMU
+  "BIC     R0, R0, #(0x1 << 11)                    \n"  // Clear Z bit 11 to disable branch prediction
+  "BIC     R0, R0, #(0x1 << 13)                    \n"  // Clear V bit 13 to disable hivecs
+  "MCR     p15, 0, R0, c1, c0, 0                   \n"  // Write value back to CP15 System Control register
+  "ISB                                             \n"
 
-  reg  = __get_ACTRL();  // Read CP15 Auxiliary Control Register
-  reg |= (0x1 <<  1);    // Enable L2 prefetch hint (UNK/WI since r4p1)
-  __set_ACTRL(reg);      // Write CP15 Auxiliary Control Register
+  // Configure ACTLR
+  "MRC     p15, 0, r0, c1, c0, 1                   \n"  // Read CP15 Auxiliary Control Register
+  "ORR     r0, r0, #(1 <<  1)                      \n"  // Enable L2 prefetch hint (UNK/WI since r4p1)
+  "MCR     p15, 0, r0, c1, c0, 1                   \n"  // Write CP15 Auxiliary Control Register
 
-  __set_VBAR((uint32_t)((uint32_t*)&Vectors));
+  // Set Vector Base Address Register (VBAR) to point to this application's vector table
+  "LDR    R0, =Vectors                             \n"
+  "MCR    p15, 0, R0, c12, c0, 0                   \n"
 
   // Setup Stack for each exceptional mode
-  __set_mode(FIQ_MODE);
-  __set_SP((uint32_t)&Image$$FIQ_STACK$$ZI$$Limit);
-  __set_mode(IRQ_MODE);
-  __set_SP((uint32_t)&Image$$IRQ_STACK$$ZI$$Limit);
-  __set_mode(SVC_MODE);
-  __set_SP((uint32_t)&Image$$SVC_STACK$$ZI$$Limit);
-  __set_mode(ABT_MODE);
-  __set_SP((uint32_t)&Image$$ABT_STACK$$ZI$$Limit);
-  __set_mode(UND_MODE);
-  __set_SP((uint32_t)&Image$$UND_STACK$$ZI$$Limit);
-  __set_mode(SYS_MODE);
-  __set_SP((uint32_t)&Image$$ARM_LIB_STACK$$ZI$$Limit);
+  "CPS    #0x11                                    \n"
+  "LDR    SP, =Image$$FIQ_STACK$$ZI$$Limit         \n"
+  "CPS    #0x12                                    \n"
+  "LDR    SP, =Image$$IRQ_STACK$$ZI$$Limit         \n"
+  "CPS    #0x13                                    \n"
+  "LDR    SP, =Image$$SVC_STACK$$ZI$$Limit         \n"
+  "CPS    #0x17                                    \n"
+  "LDR    SP, =Image$$ABT_STACK$$ZI$$Limit         \n"
+  "CPS    #0x1B                                    \n"
+  "LDR    SP, =Image$$UND_STACK$$ZI$$Limit         \n"
+  "CPS    #0x1F                                    \n"
+  "LDR    SP, =Image$$ARM_LIB_STACK$$ZI$$Limit     \n"
 
-  // Create Translation Table
-  MMU_CreateTranslationTable();
+  // Call SystemInit
+  "BL     SystemInit                               \n"
 
-  // Invalidate entire Unified TLB
-  __set_TLBIALL(0);
-  // Invalidate entire branch predictor array
-  __set_BPIALL(0);
-  __DSB();
-  __ISB();
-  //  Invalidate instruction cache and flush branch target cache
-  __set_ICIALLU(0);
-  __DSB();
-  __ISB();
+  // Unmask interrupts
+  "CPSIE  if                                       \n"
 
-  //  Invalidate data cache
-  __L1C_CleanInvalidateCache(0);
-
-  // Invalidate entire Unified TLB
-  __set_TLBIALL(0);
-  // Invalidate entire branch predictor array
-  __set_BPIALL(0);
-  __DSB();
-  __ISB();
-  // Invalidate instruction cache and flush branch target cache
-  __set_ICIALLU(0);
-  __DSB();
-  __ISB();
-
-  // Enable MMU, but leave caches disabled (they will be enabled later)
-  reg  = __get_SCTLR();  // Read CP15 System Control register
-  reg |=  (0x1 << 29);   // Set AFE bit 29 to enable simplified access permissions model
-  reg &= ~(0x1 << 28);   // Clear TRE bit 28 to disable TEX remap
-  reg &= ~(0x1 << 12);   // Clear I bit 12 to disable I Cache
-  reg &= ~(0x1 <<  2);   // Clear C bit  2 to disable D Cache
-  reg &= ~(0x1 <<  1);   // Clear A bit  1 to disable strict alignment fault checking
-  reg |=  (0x1 <<  0);	 // Set M bit 0 to enable MMU
-  __set_SCTLR(reg);      // Write CP15 System Control register
-
-  SystemInit();
-
-  extern void __main(void);
-  __main();
+  // Call __main
+  "BL     __main                                   \n"
+  );
 }
 
 /*----------------------------------------------------------------------------

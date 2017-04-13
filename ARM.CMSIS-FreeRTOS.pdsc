@@ -10,6 +10,7 @@
   <releases>
     <release version="9.0.1-dev2">
       Added support for ARM Compiler 6
+      Updated Blinky CA9 FVP example to use AC6
     </release>
     <release version="9.0.1-dev1">
       Added documentation for configuration options (native/CMSIS-RTOS2)
@@ -365,7 +366,7 @@
           <file category="source"    condition="CM7_SP_ARMCC6" name="Source/portable/GCC/ARM_CM7/r0p1/port.c"/>
           <file category="include"   condition="CA9_DP_ARMCC6" name="Source/portable/GCC/ARM_CA9/"/>
           <file category="source"    condition="CA9_DP_ARMCC6" name="Source/portable/GCC/ARM_CA9/port.c"/>
-          <file category="sourceAsm" condition="CA9_DP_ARMCC6" name="Source/portable/GCC/ARM_CA9/portASM.s"/>
+          <file category="sourceAsm" condition="CA9_DP_ARMCC6" name="Source/portable/GCC/ARM_CA9/portASM.S"/>
 		  
           <file category="include"   condition="CM0_GCC"    name="Source/portable/GCC/ARM_CM0/"/>
           <file category="source"    condition="CM0_GCC"    name="Source/portable/GCC/ARM_CM0/port.c"/>
