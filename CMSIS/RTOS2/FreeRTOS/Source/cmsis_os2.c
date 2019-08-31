@@ -1663,7 +1663,7 @@ osStatus_t osMessageQueuePut (osMessageQueueId_t mq_id, const void *msg_ptr, uin
   stat = osOK;
 
   if (IS_IRQ()) {
-    if ((hQueue == NULL) || (msg_ptr == NULL) || (timeout != 0U)) {
+    if ((hQueue == NULL) || (msg_ptr == NULL)) {
       stat = osErrorParameter;
     }
     else {
@@ -1704,7 +1704,7 @@ osStatus_t osMessageQueueGet (osMessageQueueId_t mq_id, void *msg_ptr, uint8_t *
   stat = osOK;
 
   if (IS_IRQ()) {
-    if ((hQueue == NULL) || (msg_ptr == NULL) || (timeout != 0U)) {
+    if ((hQueue == NULL) || (msg_ptr == NULL)) {
       stat = osErrorParameter;
     }
     else {
