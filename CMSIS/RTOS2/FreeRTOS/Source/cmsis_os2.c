@@ -1502,17 +1502,12 @@ osStatus_t osSemaphoreAcquire (osSemaphoreId_t semaphore_id, uint32_t timeout) {
     stat = osErrorParameter;
   }
   else if (IS_IRQ()) {
-    if (timeout != 0U) {
-      stat = osErrorParameter;
-    }
-    else {
-      yield = pdFALSE;
+    yield = pdFALSE;
 
-      if (xSemaphoreTakeFromISR (hSemaphore, &yield) != pdPASS) {
-        stat = osErrorResource;
-      } else {
-        portYIELD_FROM_ISR (yield);
-      }
+    if (xSemaphoreTakeFromISR (hSemaphore, &yield) != pdPASS) {
+      stat = osErrorResource;
+    } else {
+      portYIELD_FROM_ISR (yield);
     }
   }
   else {
